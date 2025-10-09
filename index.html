@@ -1,4 +1,3 @@
-</html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,16 +9,16 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
-        // 🔹 Firebase Config
-        const firebaseConfig = {
-            apiKey: "AIzaSyDrjD_xmVik9567ns9MeC9aNjcg3Rj7L94",
-            authDomain: "fleettracking-37db2.firebaseapp.com",
-            databaseURL: "https://fleettracking-37db2-default-rtdb.firebaseio.com",
-            projectId: "fleettracking-37db2",
-            storageBucket: "fleettracking-37db2.firebasestorage.app",
-            messagingSenderId: "328558300951",
-            appId: "1:328558300951:android:b88d97f56efb1fdfb83152"
-        };
+    // 🔹 Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDrjD_xmVik9567ns9MeC9aNjcg3Rj7L94",
+      authDomain: "fleettracking-37db2.firebaseapp.com",
+      databaseURL: "https://fleettracking-37db2-default-rtdb.firebaseio.com",
+      projectId: "fleettracking-37db2",
+      storageBucket: "fleettracking-37db2.firebasestorage.app",
+      messagingSenderId: "328558300951",
+      appId: "1:328558300951:android:b88d97f56efb1fdfb83152"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
@@ -43,13 +42,16 @@
       const { Map } = await google.maps.importLibrary("maps");
       const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
 
+      // ✅ Only ONE map initialization
       map = new Map(document.getElementById("map"), {
         center: { lat: 14.53458, lng: 121.05869 },
         zoom: 15,
         disableDefaultUI: true,
-        mapId: "f49cf1e515cbf4b6e3c25fb7 ", // 🔧 Replace with your Map ID from Google Cloud
+        mapId: "f49cf1e515cbf4b6e3c25fb7", // ✅ your Map ID
+        styleId: "45caf922c53981614c260273" // ✅ your Style ID (removed trailing space)
       });
 
+      // ✅ Populate stop list
       const stopsListDiv = document.getElementById("stopsList");
       stops.forEach((s) => {
         const div = document.createElement("div");
@@ -58,6 +60,7 @@
         stopsListDiv.appendChild(div);
       });
 
+      // ✅ Listen for driver updates
       const driversRef = ref(db, "drivers");
       onValue(driversRef, (snapshot) => {
         if (!snapshot.exists()) return;
@@ -70,10 +73,10 @@
 
         const pos = new google.maps.LatLng(latitude, longitude);
 
-        // 🚌 Bus Marker (custom icon)
+        // 🚌 Bus Marker
         if (!busMarker) {
           const busIcon = document.createElement("img");
-          busIcon.src = "bus-icon.png"; // use your custom icon
+          busIcon.src = "bus-icon.png";
           busIcon.style.width = "50px";
           busIcon.style.height = "50px";
 
@@ -88,7 +91,7 @@
           busMarker.position = pos;
         }
 
-        // 🕓 Update ETA and Next Stop
+        // 🕓 Update ETA + Next Stop
         const nextStopText = document.getElementById("nextStopText");
         const etaDisplay = document.getElementById("etaText");
         const stopsList = document.getElementById("stopsList").children;
@@ -102,10 +105,10 @@
             stopsList[i].classList.toggle("highlight", i === nextStopIndex);
           }
 
-          // 📍 Next Stop Marker (only one)
+          // 📍 Next Stop Marker
           if (!nextStopMarker) {
             const stopIcon = document.createElement("img");
-            stopIcon.src = "stop-icon.png"; // use your stop pin icon
+            stopIcon.src = "stop-icon.png";
             stopIcon.style.width = "40px";
             stopIcon.style.height = "40px";
 
@@ -183,7 +186,6 @@
       font-weight: bold;
     }
 
-    /* 📱 Mobile responsive adjustments */
     @media (max-width: 600px) {
       .info-card {
         bottom: 10px;
