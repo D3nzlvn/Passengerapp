@@ -34,24 +34,47 @@
       { lat: 14.53303, lng: 121.05069, name: "Venice Mall Tunnel Entrance" },
     ];
 
+    // 🧠 Replace this with your actual device token from ThingsBoard
+    const TB_DEVICE_TOKEN = "YOUR_THINGSBOARD_DEVICE_TOKEN";
+
     let map;
     let busMarker = null;
     let nextStopMarker = null;
+
+    // ✅ Helper: Fetch latest telemetry directly from ThingsBoard Cloud
+    async function getThingsBoardTelemetry() {
+      try {
+        const url = `https://thingsboard.cloud/api/v1/${TB_DEVICE_TOKEN}/attributes?sharedScope=SERVER_SCOPE`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to fetch telemetry");
+        const data = await response.json();
+
+        // Expecting latest telemetry keys
+        return {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          etaMinutes: data.etaMinutes,
+          etaText: data.etaText
+        };
+      } catch (err) {
+        console.error("ThingsBoard fetch error:", err);
+        return null;
+      }
+    }
 
     window.initMap = async function () {
       const { Map } = await google.maps.importLibrary("maps");
       const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
 
-      // ✅ Only ONE map initialization
       map = new Map(document.getElementById("map"), {
         center: { lat: 14.53458, lng: 121.05869 },
         zoom: 15,
         disableDefaultUI: true,
-        mapId: "f49cf1e515cbf4b6e3c25fb7", // ✅ your Map ID
-        styleId: "45caf922c53981614c260273" // ✅ your Style ID (removed trailing space)
+        mapId: "f49cf1e515cbf4b6e3c25fb7",
+        styleId: "45caf922c53981614c260273"
       });
 
-      // ✅ Populate stop list
+      // Populate stop list
       const stopsListDiv = document.getElementById("stopsList");
       stops.forEach((s) => {
         const div = document.createElement("div");
@@ -60,7 +83,7 @@
         stopsListDiv.appendChild(div);
       });
 
-      // ✅ Listen for driver updates
+      // ✅ Listen for driver updates from Firebase
       const driversRef = ref(db, "drivers");
       onValue(driversRef, (snapshot) => {
         if (!snapshot.exists()) return;
@@ -68,7 +91,19 @@
         const driver = Object.values(snapshot.val())[0]?.latest;
         if (!driver) return;
 
-        const { latitude, longitude, nextStopIndex, etaText } = driver;
+        updateMap(driver);
+      });
+
+      // ✅ Poll ThingsBoard telemetry every 15 seconds
+      setInterval(async () => {
+        const tbData = await getThingsBoardTelemetry();
+        if (tbData && tbData.latitude && tbData.longitude) {
+          updateMap(tbData, true);
+        }
+      }, 15000);
+
+      function updateMap(driver, isFromTB = false) {
+        const { latitude, longitude, nextStopIndex, eta, etaText, etaMinutes } = driver;
         if (!latitude || !longitude) return;
 
         const pos = new google.maps.LatLng(latitude, longitude);
@@ -96,33 +131,34 @@
         const etaDisplay = document.getElementById("etaText");
         const stopsList = document.getElementById("stopsList").children;
 
-        if (typeof nextStopIndex === "number" && stops[nextStopIndex]) {
-          const stop = stops[nextStopIndex];
-          nextStopText.innerText = `Next Stop: ${stop.name}`;
-          etaDisplay.innerText = `ETA: ${etaText || "Calculating..."}`;
+        const nextIdx = typeof nextStopIndex === "number" ? nextStopIndex : 0;
+        const stop = stops[nextIdx] || stops[0];
+        const etaValue = etaText || (etaMinutes ? `${etaMinutes} min` : (eta ? `${eta} min` : "Calculating..."));
 
-          for (let i = 0; i < stopsList.length; i++) {
-            stopsList[i].classList.toggle("highlight", i === nextStopIndex);
-          }
+        nextStopText.innerText = `Next Stop: ${stop.name}`;
+        etaDisplay.innerText = `ETA: ${etaValue}`;
 
-          // 📍 Next Stop Marker
-          if (!nextStopMarker) {
-            const stopIcon = document.createElement("img");
-            stopIcon.src = "stop-icon.png";
-            stopIcon.style.width = "40px";
-            stopIcon.style.height = "40px";
-
-            nextStopMarker = new AdvancedMarkerElement({
-              map,
-              position: new google.maps.LatLng(stop.lat, stop.lng),
-              title: stop.name,
-              content: stopIcon,
-            });
-          } else {
-            nextStopMarker.position = new google.maps.LatLng(stop.lat, stop.lng);
-          }
+        for (let i = 0; i < stopsList.length; i++) {
+          stopsList[i].classList.toggle("highlight", i === nextIdx);
         }
-      });
+
+        // 📍 Next Stop Marker
+        if (!nextStopMarker) {
+          const stopIcon = document.createElement("img");
+          stopIcon.src = "stop-icon.png";
+          stopIcon.style.width = "40px";
+          stopIcon.style.height = "40px";
+
+          nextStopMarker = new AdvancedMarkerElement({
+            map,
+            position: new google.maps.LatLng(stop.lat, stop.lng),
+            title: stop.name,
+            content: stopIcon,
+          });
+        } else {
+          nextStopMarker.position = new google.maps.LatLng(stop.lat, stop.lng);
+        }
+      }
     };
   </script>
 
@@ -215,7 +251,7 @@
     <div id="stopsList" class="stops-list"></div>
   </div>
 
-  <!-- ✅ Async load Maps JS -->
+  <!-- ✅ Google Maps -->
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxLu0osGhSyZCJt5TGO-gSPuGydL_u7XE&callback=initMap&loading=async&libraries=maps,marker"
     async defer>
