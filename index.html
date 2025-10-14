@@ -1,288 +1,261 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Passenger Bus Tracker</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Passenger Bus Tracker</title>
+<style>
+html, body { height: 100%; margin: 0; font-family: "Poppins", Arial, sans-serif; background: #f8f9fa; overflow: hidden; }
+#map { height: 100%; width: 100%; position: absolute; top: 0; left: 0; z-index: 0; }
+.sidebar { position: absolute; top: 0; left: 0; width: 340px; height: 100%; background: #fff; box-shadow: 4px 0 15px rgba(0,0,0,0.15); z-index: 5; overflow-y: auto; border-radius: 0 20px 20px 0; padding: 18px 22px; }
+h2 { text-align: center; margin: 0 0 16px; font-weight: 700; color: #333; font-size: 20px; }
+.stop-selector { margin-bottom: 20px; text-align: center; }
+.stop-selector select { padding: 6px 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; width: 90%; }
+.stop-info { background: #f1f5ff; padding: 10px 14px; border-radius: 10px; margin-bottom: 20px; font-size: 14px; text-align: center; color: #333; }
+.bus-card { background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 14px 18px; margin-bottom: 18px; }
+.bus-name { font-size: 17px; font-weight: 600; color: #007aff; margin-bottom: 5px; display: flex; align-items: center; }
+.bus-color { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-left: 8px; border: 1px solid #ccc; }
+.eta { font-size: 15px; margin-bottom: 8px; color: #444; }
+.route-title { font-weight: 600; color: #555; margin-top: 8px; }
+.stop { font-size: 14px; color: #555; margin: 3px 0; }
+.stop.active { color: #007aff; font-weight: 600; transform: translateX(4px); }
+@media (max-width: 768px) { .sidebar { width: 95%; left: 50%; transform: translateX(-50%); top: auto; bottom: 0; border-radius: 20px 20px 0 0; height: 50%; box-shadow: 0 -4px 15px rgba(0,0,0,0.15); } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="sidebar">
+<h2>🚌 Active Buses</h2>
+<div class="stop-selector">
+<select id="stopSelect">
+  <option value="C5 McKinley Hill Terminal">C5 McKinley Hill Terminal</option>
+  <option value="CIP Building">CIP Building</option>
+  <option value="Science Hub Tower 1">Science Hub Tower 1</option>
+  <option value="Science Hub 3">Science Hub 3</option>
+  <option value="Wells Fargo">Wells Fargo</option>
+  <option value="Venice Mall Entrance: Kenny Rogers">Venice Mall Entrance: Kenny Rogers</option>
+  <option value="Venice Mall Tunnel Entrance">Venice Mall Tunnel Entrance</option>
+  <option value="West Campus">West Campus</option>
+</select>
+</div>
+<div class="stop-info" id="stopInfo">
+  <strong>Your Bus Stop Location:</strong><br>
+  C5 McKinley Hill Terminal
+</div>
+<div id="busList"></div>
+</div>
 
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
-    // 🔹 Firebase Config
-    const firebaseConfig = {
-      apiKey: "AIzaSyDrjD_xmVik9567ns9MeC9aNjcg3Rj7L94",
-      authDomain: "fleettracking-37db2.firebaseapp.com",
-      databaseURL: "https://fleettracking-37db2-default-rtdb.firebaseio.com",
-      projectId: "fleettracking-37db2",
-      storageBucket: "fleettracking-37db2.firebasestorage.app",
-      messagingSenderId: "328558300951",
-      appId: "1:328558300951:android:b88d97f56efb1fdfb83152"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyDrjD_xmVik9567ns9MeC9aNjcg3Rj7L94",
+  authDomain: "fleettracking-37db2.firebaseapp.com",
+  databaseURL: "https://fleettracking-37db2-default-rtdb.firebaseio.com",
+  projectId: "fleettracking-37db2",
+  storageBucket: "fleettracking-37db2.firebasestorage.app",
+  messagingSenderId: "328558300951",
+  appId: "1:328558300951:android:b88d97f56efb1fdfb83152"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+const routeStops = {
+  "Route 1":[
+    { lat:14.539542518474407, lng:121.05389809563069, name:"C5 McKinley Hill Terminal" },
+    { lat:14.534531637299956, lng:121.05264602882518, name:"CIP Building" },
+    { lat:14.532423874449082, lng:121.05239322349271, name:"Science Hub Tower 1" },
+    { lat:14.531313699380895, lng:121.05273772385104, name:"Science Hub 3" },
+    { lat:14.531559203911272, lng:121.05284577607166, name:"Wells Fargo" },
+    { lat:14.532519563334532, lng:121.0520162763821, name:"Venice Mall Entrance: Kenny Rogers" },
+    { lat:14.53281514847156, lng:121.05079675705527, name:"Venice Mall Tunnel Entrance" },
+    { lat:14.535815154431011, lng:121.0449831667782, name:"West Campus" }
+  ]
+};
 
-    // 🗺️ Bus Route (same as in Android driver app)
-    const routeStops = {
-      "Route 1": [
-        { lat: 14.53951, lng: 121.05401, name: "C5 McKinley Hill Terminal" },
-        { lat: 14.534531637299956, lng: 121.05264602882518, name: "CIP Building" },
-        { lat: 14.53243, lng: 121.05324, name: "Science Hub Tower 1" },
-        { lat: 14.53133, lng: 121.05327, name: "Science Hub 3" },
-        { lat: 14.53178, lng: 121.05373, name: "Wells Fargo" },
-        { lat: 14.53253, lng: 121.05205, name: "Venice Mall Entrance: Kenny Rogers" },
-        { lat: 14.53303, lng: 121.05069, name: "Venice Mall Tunnel Entrance" },
-        { lat: 14.53612, lng: 121.04508, name: "West Campus" }
+let selectedStopName="C5 McKinley Hill Terminal";
+let map, youMarker, directionsService, directionsRenderers={}, busMarkers={};
+let snapshotCache=null, mapReady=false;
 
-       , 
-      ]
-    };
+const colors=[
+  {name:"Red", code:"#FF3B30"},
+  {name:"Orange", code:"#FF9500"},
+  {name:"Yellow", code:"#FFCC00"},
+  {name:"Green", code:"#34C759"},
+  {name:"Blue", code:"#007AFF"},
+  {name:"Purple", code:"#5856D6"},
+  {name:"Pink", code:"#FF2D55"}
+];
 
-    let map;
-    let busMarkers = {};
-    let stopMarkers = {};
-    let snapshotCache = null;
-    let mapReady = false;
+window.initMap=function(){
+  const allStops=Object.values(routeStops).flat();
+  const currentStop=allStops.find(s=>s.name===selectedStopName)||allStops[0];
+  map=new google.maps.Map(document.getElementById("map"),{
+    center:{lat:currentStop.lat, lng:currentStop.lng},
+    zoom:16,
+    disableDefaultUI:true
+  });
+  youMarker=new google.maps.Marker({
+    position:currentStop,
+    map:map,
+    title:"You are here",
+    icon:{url:"stop-icon.png", scaledSize:new google.maps.Size(45,45)}
+  });
+  directionsService=new google.maps.DirectionsService();
+  mapReady=true;
+  if(snapshotCache) updateMap(snapshotCache);
+};
 
-    // ✅ Initialize Map
-    window.initMap = function () {
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: { lat: 14.53458, lng: 121.05269 },
-        zoom: 15,
-        disableDefaultUI: false,
-        mapId: "f49cf1e515cbf4b6e3c25fb7"
-      });
+document.addEventListener("DOMContentLoaded",()=>{
+  const select=document.getElementById("stopSelect");
+  const info=document.getElementById("stopInfo");
 
-      mapReady = true;
-      if (snapshotCache) updateMap(snapshotCache);
-    };
+  select.addEventListener("change",(e)=>{
+    selectedStopName=e.target.value;
+    info.innerHTML=`<strong>Your Bus Stop Location:</strong><br>${selectedStopName}`;
+    updateYouMarker();
 
-    // 🔁 Firebase Realtime Listener
-    const driversRef = ref(db, "drivers");
-    onValue(driversRef, (snapshot) => {
-      snapshotCache = snapshot;
-      if (mapReady) updateMap(snapshot);
-    });
+    if(snapshotCache && mapReady){
+      const allStops=Object.values(routeStops).flat();
+      const currentStop=allStops.find(s=>s.name===selectedStopName);
 
-    // 🔄 Update Map + Sidebar
-    function updateMap(snapshot) {
-      const busListDiv = document.getElementById("busList");
-      busListDiv.innerHTML = "";
-
-      if (!snapshot.exists()) return;
-      const drivers = snapshot.val();
-
-      Object.entries(drivers).forEach(([driverId, data]) => {
-        const latest = data.latest;
-        if (!latest || !latest.latitude || !latest.longitude) return;
-
-        const route = latest.route || "Route 1";
-        const stops = routeStops[route] || [];
-        const busName = latest.busName || "Bus";
-        const { latitude, longitude, etaMinutes, nextStop, status } = latest;
-
-        const pos = new google.maps.LatLng(latitude, longitude);
-        const nextStopObj = stops.find(s => s.name === nextStop) || stops[0];
-
-        // 🚌 Bus Marker
-        if (!busMarkers[driverId]) {
-          busMarkers[driverId] = new google.maps.Marker({
-            position: pos,
-            map: map,
-            title: busName,
-            icon: {
-              url: "bus-icon.png", // ← use your image file name here
-              scaledSize: new google.maps.Size(48, 48), // adjust size if needed
-              anchor: new google.maps.Point(24, 24)
-            }
-          });
-        } else {
-          busMarkers[driverId].setPosition(pos);
-        }
-
-
-        // 📍 Create/Update Stop Marker
-        if (!stopMarkers[driverId]) {
-          stopMarkers[driverId] = new google.maps.Marker({
-            position: { lat: nextStopObj.lat, lng: nextStopObj.lng },
-            map: map,
-            title: `Next Stop: ${nextStopObj.name}`,
-            icon: {
-              url: "stop-icon.png",
-              scaledSize: new google.maps.Size(35, 35)
-            }
-          });
-        } else {
-          stopMarkers[driverId].setPosition({ lat: nextStopObj.lat, lng: nextStopObj.lng });
-        }
-
-        // 📝 Bus Info Card
-        const etaText = etaMinutes ? `${etaMinutes} min` : "Calculating...";
-        const busDiv = document.createElement("div");
-        busDiv.className = "bus-card";
-        busDiv.innerHTML = `
-          <div class="bus-header">
-            <div class="bus-name">${busName}</div>
-            <div class="bus-route">${route}</div>
-          </div>
-          <div class="bus-status ${status.includes('Arriv') ? 'status-arriving' :
-                                   status.includes('Left') ? 'status-left' :
-                                   status.includes('Complete') ? 'status-done' :
-                                   'status-enroute'}">
-            ${status}
-          </div>
-          <div class="bus-info">
-            <div><strong>📍 Next Stop:</strong> ${nextStopObj.name}</div>
-            <div><strong>🕒 ETA:</strong> ${etaText}</div>
-          </div>
-          <div class="stops">
-            ${stops.map(s => `
-              <div class="stop ${s.name === nextStopObj.name ? "active" : ""}">
-                • ${s.name}
-              </div>
-            `).join("")}
-          </div>
-        `;
-        busListDiv.appendChild(busDiv);
-      });
-    }
-  </script>
-
-  <!-- ✅ Styles -->
-  <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      font-family: "Poppins", Arial, sans-serif;
-      background: #f8f9fa;
-      overflow: hidden;
-    }
-
-    #map {
-      height: 100%;
-      width: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 0;
-    }
-
-    .sidebar {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 340px;
-      height: 100%;
-      background: white;
-      box-shadow: 4px 0 15px rgba(0,0,0,0.15);
-      z-index: 5;
-      overflow-y: auto;
-      border-radius: 0 20px 20px 0;
-      padding: 16px 20px;
-    }
-
-    h2 {
-      text-align: center;
-      margin: 10px 0 20px;
-      font-weight: 600;
-      color: #333;
-    }
-
-    .bus-card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      padding: 14px 18px;
-      margin-bottom: 18px;
-    }
-
-    .bus-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .bus-name {
-      font-size: 18px;
-      font-weight: 600;
-      color: #007aff;
-    }
-
-    .bus-route {
-      font-size: 13px;
-      color: #777;
-    }
-
-    .bus-status {
-      margin-top: 6px;
-      padding: 6px 10px;
-      border-radius: 12px;
-      font-size: 13px;
-      text-align: center;
-      font-weight: 500;
-      width: fit-content;
-    }
-
-    .status-arriving { background: #e3f2fd; color: #007aff; }
-    .status-left { background: #fff3cd; color: #a67c00; }
-    .status-enroute { background: #e8f5e9; color: #2e7d32; }
-    .status-done { background: #fbe9e7; color: #d84315; }
-
-    .bus-info {
-      margin-top: 10px;
-      color: #333;
-      font-size: 15px;
-      line-height: 1.6;
-    }
-
-    .stops {
-      margin-top: 10px;
-      padding-left: 10px;
-      border-left: 3px solid #007aff33;
-    }
-
-    .stop {
-      font-size: 14px;
-      color: #555;
-      margin: 3px 0;
-      transition: 0.2s;
-    }
-
-    .stop.active {
-      color: #007aff;
-      font-weight: 600;
-      transform: translateX(4px);
-    }
-
-    @media (max-width: 768px) {
-      .sidebar {
-        width: 95%;
-        left: 50%;
-        transform: translateX(-50%);
-        top: auto;
-        bottom: 0;
-        border-radius: 20px 20px 0 0;
-        height: 45%;
-        box-shadow: 0 -4px 15px rgba(0,0,0,0.15);
+      // ONLY redraw route lines, no ETA call
+      let driverIndex=0;
+      const drivers=snapshotCache.val();
+      for(const [driverId,data] of Object.entries(drivers)){
+        const latest=data.latest;
+        if(!latest || !latest.latitude || !latest.longitude) continue;
+        const colorObj=colors[driverIndex % colors.length];
+        driverIndex++;
+        drawRoute(driverId,{lat:latest.latitude,lng:latest.longitude},currentStop,colorObj.code);
       }
     }
-  </style>
-</head>
+  });
+});
 
-<body>
-  <div id="map"></div>
+function updateYouMarker(){
+  const allStops=Object.values(routeStops).flat();
+  const stop=allStops.find(s=>s.name===selectedStopName);
+  if(!stop) return;
+  youMarker.setPosition(stop);
+  map.panTo(stop);
+}
 
-  <div class="sidebar">
-    <h2>🚌 Active Buses</h2>
-    <div id="busList"></div>
-  </div>
+const driversRef=ref(db,"drivers");
+let lastUpdateTime=0;
 
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxLu0osGhSyZCJt5TGO-gSPuGydL_u7XE&callback=initMap"
-    async ></script>
+onValue(driversRef,(snapshot)=>{
+  const now=Date.now();
+  if(now-lastUpdateTime<20000) return; // 20s interval
+  lastUpdateTime=now;
+  snapshotCache=snapshot;
+  if(mapReady) updateMap(snapshot);
+});
 
+// Only update route if bus moves >50m
+function shouldUpdateRoute(driverId,newPos){
+  const marker=busMarkers[driverId];
+  if(!marker.prevPos){ marker.prevPos=newPos; return true; }
+  const distance=google.maps.geometry.spherical.computeDistanceBetween(marker.prevPos,newPos);
+  marker.prevPos=newPos;
+  return distance>50;
+}
+
+async function updateMap(snapshot){
+  const busListDiv=document.getElementById("busList");
+  busListDiv.innerHTML="";
+  if(!snapshot.exists()) return;
+  const drivers=snapshot.val();
+  const allStops=Object.values(routeStops).flat();
+  const currentStop=allStops.find(s=>s.name===selectedStopName);
+  let driverIndex=0;
+
+  for(const [driverId,data] of Object.entries(drivers)){
+    const latest=data.latest;
+    if(!latest || !latest.latitude || !latest.longitude) continue;
+    const route=latest.route||"Route 1";
+    const stops=routeStops[route]||[];
+    const busName=latest.busName||"Bus";
+    const {latitude,longitude}=latest;
+    const pos=new google.maps.LatLng(latitude,longitude);
+    const colorObj=colors[driverIndex % colors.length];
+    driverIndex++;
+
+    if(!busMarkers[driverId]){
+      busMarkers[driverId]=new google.maps.Marker({
+        position:pos,
+        map:map,
+        title:busName,
+        icon:{url:"bus-icon.png", scaledSize:new google.maps.Size(48,48)},
+        lastETATime:0,
+        etaText:""
+      });
+    } else {
+      busMarkers[driverId].setPosition(pos);
+    }
+
+    if(!busMarkers[driverId].lastETATime || Date.now()-busMarkers[driverId].lastETATime>20000){
+      const distance=google.maps.geometry.spherical.computeDistanceBetween(pos,new google.maps.LatLng(currentStop.lat,currentStop.lng))/1000;
+      if(distance<0.02){
+        busMarkers[driverId].etaText="🟢 Bus is at the terminal";
+      } else {
+        const eta=await getETA(latitude,longitude,currentStop.lat,currentStop.lng);
+        busMarkers[driverId].etaText=eta?`${eta} min`:"Calculating...";
+      }
+      busMarkers[driverId].lastETATime=Date.now();
+    }
+
+    if(shouldUpdateRoute(driverId,pos)){
+      drawRoute(driverId,{lat:latitude,lng:longitude},currentStop,colorObj.code);
+    }
+
+    const busDiv=document.createElement("div");
+    busDiv.className="bus-card";
+    busDiv.innerHTML=`
+      <div class="bus-name">
+        ${busName} <span class="bus-color" style="background:${colorObj.code}"></span>
+      </div>
+      <div class="eta"><strong>ETA:</strong> ${busMarkers[driverId].etaText}</div>
+      <div class="route-title">${route}:</div>
+      ${stops.map(s=>`<div class="stop ${s.name===currentStop.name?"active":""}">• ${s.name}</div>`).join("")}
+    `;
+    busListDiv.appendChild(busDiv);
+  }
+}
+
+function drawRoute(driverId,origin,destination,color){
+  if(directionsRenderers[driverId]) directionsRenderers[driverId].setMap(null);
+  const renderer=new google.maps.DirectionsRenderer({
+    suppressMarkers:true,
+    preserveViewport:true,
+    polylineOptions:{strokeColor:color, strokeWeight:4}
+  });
+  renderer.setMap(map);
+  directionsRenderers[driverId]=renderer;
+  directionsService.route({
+    origin,destination,travelMode:google.maps.TravelMode.DRIVING
+  },(result,status)=>{
+    if(status==="OK") renderer.setDirections(result);
+  });
+}
+
+async function getETA(busLat,busLng,stopLat,stopLng){
+  try{
+    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(
+      `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${busLat},${busLng}&destinations=${stopLat},${stopLng}&departure_time=now&traffic_model=best_guess&key=AIzaSyBxLu0osGhSyZCJt5TGO-gSPuGydL_u7XE`
+    )}`;
+    const res=await fetch(proxy);
+    const data=await res.json();
+    const json=JSON.parse(data.contents);
+    const el=json.rows[0].elements[0];
+    if(el.status!=="OK") return null;
+    const seconds=el.duration_in_traffic?el.duration_in_traffic.value:el.duration.value;
+    return Math.max(1,Math.ceil(seconds/60));
+  } catch { return null; }
+}
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxLu0osGhSyZCJt5TGO-gSPuGydL_u7XE&libraries=geometry&callback=initMap" async defer></script>
 </body>
 </html>
