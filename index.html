@@ -19,36 +19,39 @@ h2 { text-align: center; margin: 0 0 16px; font-weight: 700; color: #333; font-s
 .route-title { font-weight: 600; color: #555; margin-top: 8px; }
 .stop { font-size: 14px; color: #555; margin: 3px 0; }
 .stop.active { color: #007aff; font-weight: 600; transform: translateX(4px); }
-@media (max-width: 768px) { .sidebar { width: 95%; left: 50%; transform: translateX(-50%); top: auto; bottom: 0; border-radius: 20px 20px 0 0; height: 50%; box-shadow: 0 -4px 15px rgba(0,0,0,0.15); } }
+@media (max-width: 768px) { 
+  .sidebar { width: 95%; left: 50%; transform: translateX(-50%); top: auto; bottom: 0; border-radius: 20px 20px 0 0; height: 50%; box-shadow: 0 -4px 15px rgba(0,0,0,0.15); } 
+}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div class="sidebar">
-<h2>🚌 Active Buses</h2>
-<div class="stop-selector">
-<select id="stopSelect">
-  <option value="C5 McKinley Hill Terminal">C5 McKinley Hill Terminal</option>
-  <option value="CIP Building">CIP Building</option>
-  <option value="Science Hub Tower 1">Science Hub Tower 1</option>
-  <option value="Science Hub 3">Science Hub 3</option>
-  <option value="Wells Fargo">Wells Fargo</option>
-  <option value="Venice Mall Entrance: Kenny Rogers">Venice Mall Entrance: Kenny Rogers</option>
-  <option value="Venice Mall Tunnel Entrance">Venice Mall Tunnel Entrance</option>
-  <option value="West Campus">West Campus</option>
-</select>
-</div>
-<div class="stop-info" id="stopInfo">
-  <strong>Your Bus Stop Location:</strong><br>
-  C5 McKinley Hill Terminal
-</div>
-<div id="busList"></div>
+  <h2>🚌 Active Buses</h2>
+  <div class="stop-selector">
+    <select id="stopSelect">
+      <option value="C5 McKinley Hill Terminal">C5 McKinley Hill Terminal</option>
+      <option value="CIP Building">CIP Building</option>
+      <option value="Science Hub Tower 1">Science Hub Tower 1</option>
+      <option value="Science Hub 3">Science Hub 3</option>
+      <option value="Wells Fargo">Wells Fargo</option>
+      <option value="Venice Mall Entrance: Kenny Rogers">Venice Mall Entrance: Kenny Rogers</option>
+      <option value="Venice Mall Tunnel Entrance">Venice Mall Tunnel Entrance</option>
+      <option value="West Campus">West Campus</option>
+    </select>
+  </div>
+  <div class="stop-info" id="stopInfo">
+    <strong>Your Bus Stop Location:</strong><br>
+    C5 McKinley Hill Terminal
+  </div>
+  <div id="busList"></div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
+// ===== Firebase config =====
 const firebaseConfig = {
   apiKey: "AIzaSyDrjD_xmVik9567ns9MeC9aNjcg3Rj7L94",
   authDomain: "fleettracking-37db2.firebaseapp.com",
@@ -61,6 +64,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// ===== Routes & Stops =====
 const routeStops = {
   "Route 1":[
     { lat:14.539542518474407, lng:121.05389809563069, name:"C5 McKinley Hill Terminal" },
@@ -71,13 +75,25 @@ const routeStops = {
     { lat:14.532519563334532, lng:121.0520162763821, name:"Venice Mall Entrance: Kenny Rogers" },
     { lat:14.53281514847156, lng:121.05079675705527, name:"Venice Mall Tunnel Entrance" },
     { lat:14.535815154431011, lng:121.0449831667782, name:"West Campus" }
+  ],
+  "Route 2":[
+    { lat:14.53505, lng:121.05354, name:"Mckinley Hill Open Park" },
+    { lat:14.532519563334532, lng:121.0520162763821, name:"Venice Mall Entrance: Kenny Rogers" },
+    { lat:14.53503, lng:121.04949, name:"Metrobank Two World Square" },
+    { lat:14.55230, lng:121.05391, name:"11th Ave., Uptown Mall Entrance" }
+  ],
+  "Route 3":[
+    { lat:14.5430, lng:121.0570, name:"11th Ave., Uptown Mall Entrance" },
+    { lat:14.5440, lng:121.0580, name:"Mckinley Hill Information Center" },
+    { lat:14.5450, lng:121.0590, name:"Venice Mall Main Entrance" },
+    { lat:14.534531637299956, lng:121.05264602882518, name:"CIP Building" },
+    { lat:14.53505, lng:121.05354, name:"Mckinley Hill Open Park" }
   ]
 };
 
 let selectedStopName="C5 McKinley Hill Terminal";
 let map, youMarker, directionsService, directionsRenderers={}, busMarkers={};
 let snapshotCache=null, mapReady=false;
-
 const colors=[
   {name:"Red", code:"#FF3B30"},
   {name:"Orange", code:"#FF9500"},
@@ -88,6 +104,7 @@ const colors=[
   {name:"Pink", code:"#FF2D55"}
 ];
 
+// ===== Map Initialization =====
 window.initMap=function(){
   const allStops=Object.values(routeStops).flat();
   const currentStop=allStops.find(s=>s.name===selectedStopName)||allStops[0];
@@ -107,32 +124,15 @@ window.initMap=function(){
   if(snapshotCache) updateMap(snapshotCache);
 };
 
+// ===== Stop Selection =====
 document.addEventListener("DOMContentLoaded",()=>{
   const select=document.getElementById("stopSelect");
   const info=document.getElementById("stopInfo");
-
   select.addEventListener("change",(e)=>{
     selectedStopName=e.target.value;
     info.innerHTML=`<strong>Your Bus Stop Location:</strong><br>${selectedStopName}`;
     updateYouMarker();
-
-    if(snapshotCache && mapReady){
-      const allStops=Object.values(routeStops).flat();
-      const currentStop=allStops.find(s=>s.name===selectedStopName);
-
-      // redraw route lines, no ETA call
-      let driverIndex=0;
-      const drivers=snapshotCache.val();
-      for(const [driverId,data] of Object.entries(drivers)){
-        const latest=data.latest;
-        if(!latest || !latest.latitude || !latest.longitude) continue;
-        const colorObj=colors[driverIndex % colors.length];
-        driverIndex++;
-        drawRoute(driverId,{lat:latest.latitude,lng:latest.longitude},currentStop,colorObj.code);
-      }
-      // redraw sidebar highlights
-      updateMap(snapshotCache);
-    }
+    if(snapshotCache && mapReady) updateMap(snapshotCache);
   });
 });
 
@@ -144,17 +144,18 @@ function updateYouMarker(){
   map.panTo(stop);
 }
 
+// ===== Firebase Listener =====
 const driversRef=ref(db,"drivers");
 let lastUpdateTime=0;
-
 onValue(driversRef,(snapshot)=>{
   const now=Date.now();
-  if(now-lastUpdateTime<20000) return; // update every 20s
+  if(now-lastUpdateTime<20000) return;
   lastUpdateTime=now;
   snapshotCache=snapshot;
   if(mapReady) updateMap(snapshot);
 });
 
+// ===== Map Update =====
 function shouldUpdateRoute(driverId,newPos){
   const marker=busMarkers[driverId];
   if(!marker.prevPos){ marker.prevPos=newPos; return true; }
@@ -214,9 +215,7 @@ async function updateMap(snapshot){
     const busDiv=document.createElement("div");
     busDiv.className="bus-card";
     busDiv.innerHTML=`
-      <div class="bus-name">
-        ${busName} <span class="bus-color" style="background:${colorObj.code}"></span>
-      </div>
+      <div class="bus-name">${busName} <span class="bus-color" style="background:${colorObj.code}"></span></div>
       <div class="eta"><strong>ETA:</strong> ${busMarkers[driverId].etaText}</div>
       <div class="route-title">${route}:</div>
       ${stops.map(s=>`<div class="stop ${s.name===currentStop.name?"active":""}">• ${s.name}</div>`).join("")}
@@ -225,6 +224,7 @@ async function updateMap(snapshot){
   }
 }
 
+// ===== Draw Route =====
 function drawRoute(driverId,origin,destination,color){
   if(directionsRenderers[driverId]) directionsRenderers[driverId].setMap(null);
   const renderer=new google.maps.DirectionsRenderer({
@@ -241,6 +241,7 @@ function drawRoute(driverId,origin,destination,color){
   });
 }
 
+// ===== ETA Calculation =====
 async function getETA(busLat,busLng,stopLat,stopLng){
   try{
     const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(
