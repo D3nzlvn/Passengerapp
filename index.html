@@ -6,6 +6,7 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Passenger Bus Tracker</title>
 
+  <!-- Firebase -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
@@ -24,12 +25,12 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 🗺️ Fixed Bus Routes
+    // 🗺️ Bus Route (same as in Android driver app)
     const routeStops = {
       "Route 1": [
         { lat: 14.53951, lng: 121.05401, name: "C5 McKinley Hill Terminal" },
-        { lat: 14.53436, lng: 121.05257, name: "CIP Building" },
-        { lat: 14.53249, lng: 121.05213, name: "Science Hub Tower 1" },
+        { lat: 14.53458, lng: 121.05869, name: "CIP Building" },
+        { lat: 14.53243, lng: 121.05324, name: "Science Hub Tower 1" },
         { lat: 14.53133, lng: 121.05327, name: "Science Hub 3" },
         { lat: 14.53178, lng: 121.05373, name: "Wells Fargo" },
         { lat: 14.53296, lng: 121.05298, name: "Venice Mall Entrance: Kenny Rogers" },
@@ -40,8 +41,8 @@
 
     let map;
     let busMarkers = {};
-    let nextStopMarkers = {};
-    let firebaseData = null;
+    let stopMarkers = {};
+    let snapshotCache = null;
     let mapReady = false;
 
     // ✅ Initialize Map
@@ -49,19 +50,18 @@
       map = new google.maps.Map(document.getElementById("map"), {
         center: { lat: 14.53458, lng: 121.05269 },
         zoom: 15,
-        disableDefaultUI: true,
+        disableDefaultUI: false,
         mapId: "f49cf1e515cbf4b6e3c25fb7"
       });
-      mapReady = true;
 
-      // If Firebase already loaded, render immediately
-      if (firebaseData) updateMap(firebaseData);
+      mapReady = true;
+      if (snapshotCache) updateMap(snapshotCache);
     };
 
-    // 🔁 Firebase real-time updates
+    // 🔁 Firebase Realtime Listener
     const driversRef = ref(db, "drivers");
     onValue(driversRef, (snapshot) => {
-      firebaseData = snapshot;
+      snapshotCache = snapshot;
       if (mapReady) updateMap(snapshot);
     });
 
@@ -69,71 +69,76 @@
     function updateMap(snapshot) {
       const busListDiv = document.getElementById("busList");
       busListDiv.innerHTML = "";
-      if (!snapshot.exists()) return;
 
+      if (!snapshot.exists()) return;
       const drivers = snapshot.val();
 
       Object.entries(drivers).forEach(([driverId, data]) => {
         const latest = data.latest;
-        if (!latest) return;
+        if (!latest || !latest.latitude || !latest.longitude) return;
 
-        const routeName = latest.selectedRoute || "Route 1";
-        const stops = routeStops[routeName] || [];
-        const busName = latest.busName || "Bus A";
-        const { latitude, longitude, etaMinutes, nextStop } = latest;
+        const route = latest.route || "Route 1";
+        const stops = routeStops[route] || [];
+        const busName = latest.busName || "Bus";
+        const { latitude, longitude, etaMinutes, nextStop, status } = latest;
 
-        if (!latitude || !longitude) return;
         const pos = new google.maps.LatLng(latitude, longitude);
         const nextStopObj = stops.find(s => s.name === nextStop) || stops[0];
-        const etaDisplay = etaMinutes ? `${etaMinutes} min` : "Calculating...";
 
-        // 🚌 Create / Update Bus Marker
+        // 🚌 Bus Marker
         if (!busMarkers[driverId]) {
           busMarkers[driverId] = new google.maps.Marker({
             position: pos,
             map: map,
             title: busName,
             icon: {
-              url: "bus-icon.png",
-              scaledSize: new google.maps.Size(45, 45),
-              anchor: new google.maps.Point(22, 22)
+              url: "bus-icon.png", // ← use your image file name here
+              scaledSize: new google.maps.Size(48, 48), // adjust size if needed
+              anchor: new google.maps.Point(24, 24)
             }
           });
         } else {
           busMarkers[driverId].setPosition(pos);
         }
 
-        // 📍 Create / Update Next Stop Marker
-        if (!nextStopMarkers[driverId]) {
-          nextStopMarkers[driverId] = new google.maps.Marker({
+
+        // 📍 Create/Update Stop Marker
+        if (!stopMarkers[driverId]) {
+          stopMarkers[driverId] = new google.maps.Marker({
             position: { lat: nextStopObj.lat, lng: nextStopObj.lng },
             map: map,
             title: `Next Stop: ${nextStopObj.name}`,
             icon: {
-              url: "stop-icon.png",
-              scaledSize: new google.maps.Size(38, 38),
-              anchor: new google.maps.Point(19, 19)
+              url: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
+              scaledSize: new google.maps.Size(35, 35)
             }
           });
         } else {
-          nextStopMarkers[driverId].setPosition({ lat: nextStopObj.lat, lng: nextStopObj.lng });
+          stopMarkers[driverId].setPosition({ lat: nextStopObj.lat, lng: nextStopObj.lng });
         }
 
         // 📝 Bus Info Card
+        const etaText = etaMinutes ? `${etaMinutes} min` : "Calculating...";
         const busDiv = document.createElement("div");
-        busDiv.className = "bus-info";
+        busDiv.className = "bus-card";
         busDiv.innerHTML = `
           <div class="bus-header">
-            <div class="bus-title">${busName}</div>
-            <div class="bus-subtitle">🛣 ${routeName}</div>
+            <div class="bus-name">${busName}</div>
+            <div class="bus-route">${route}</div>
           </div>
-          <div class="bus-details">
+          <div class="bus-status ${status.includes('Arriv') ? 'status-arriving' :
+                                   status.includes('Left') ? 'status-left' :
+                                   status.includes('Complete') ? 'status-done' :
+                                   'status-enroute'}">
+            ${status}
+          </div>
+          <div class="bus-info">
             <div><strong>📍 Next Stop:</strong> ${nextStopObj.name}</div>
-            <div><strong>🕒 ETA:</strong> ${etaDisplay}</div>
+            <div><strong>🕒 ETA:</strong> ${etaText}</div>
           </div>
-          <div class="stops-list">
+          <div class="stops">
             ${stops.map(s => `
-              <div class="stop-item ${s.name === nextStopObj.name ? "highlight" : ""}">
+              <div class="stop ${s.name === nextStopObj.name ? "active" : ""}">
                 • ${s.name}
               </div>
             `).join("")}
@@ -144,6 +149,7 @@
     }
   </script>
 
+  <!-- ✅ Styles -->
   <style>
     html, body {
       height: 100%;
@@ -159,91 +165,107 @@
       position: absolute;
       top: 0;
       left: 0;
+      z-index: 0;
     }
 
-    .info-card {
+    .sidebar {
       position: absolute;
       top: 0;
       left: 0;
-      height: 100%;
       width: 340px;
-      background: rgba(255, 255, 255, 0.97);
-      box-shadow: 3px 0 15px rgba(0, 0, 0, 0.15);
-      padding: 16px 20px;
+      height: 100%;
+      background: white;
+      box-shadow: 4px 0 15px rgba(0,0,0,0.15);
+      z-index: 5;
       overflow-y: auto;
       border-radius: 0 20px 20px 0;
-    }
-
-    .bus-info {
-      margin-bottom: 20px;
       padding: 16px 20px;
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    .bus-title {
-      font-size: 20px;
-      font-weight: 600;
-      color: #007aff;
-    }
-
-    .bus-subtitle {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 10px;
-    }
-
-    .bus-details {
-      font-size: 16px;
-      color: #333;
-      line-height: 1.6;
-      margin-bottom: 10px;
-    }
-
-    .stops-list {
-      margin-top: 8px;
-      padding-left: 12px;
-      border-left: 3px solid #007aff33;
-    }
-
-    .stop-item {
-      font-size: 15px;
-      color: #555;
-      margin: 4px 0;
-      transition: all 0.2s;
-    }
-
-    .highlight {
-      color: #007aff;
-      font-weight: 600;
-      font-size: 16px;
-      transform: translateX(3px);
     }
 
     h2 {
-      margin-top: 0;
-      margin-bottom: 14px;
-      font-size: 22px;
-      color: #333;
       text-align: center;
+      margin: 10px 0 20px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .bus-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 14px 18px;
+      margin-bottom: 18px;
+    }
+
+    .bus-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .bus-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #007aff;
+    }
+
+    .bus-route {
+      font-size: 13px;
+      color: #777;
+    }
+
+    .bus-status {
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+      text-align: center;
+      font-weight: 500;
+      width: fit-content;
+    }
+
+    .status-arriving { background: #e3f2fd; color: #007aff; }
+    .status-left { background: #fff3cd; color: #a67c00; }
+    .status-enroute { background: #e8f5e9; color: #2e7d32; }
+    .status-done { background: #fbe9e7; color: #d84315; }
+
+    .bus-info {
+      margin-top: 10px;
+      color: #333;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .stops {
+      margin-top: 10px;
+      padding-left: 10px;
+      border-left: 3px solid #007aff33;
+    }
+
+    .stop {
+      font-size: 14px;
+      color: #555;
+      margin: 3px 0;
+      transition: 0.2s;
+    }
+
+    .stop.active {
+      color: #007aff;
+      font-weight: 600;
+      transform: translateX(4px);
     }
 
     @media (max-width: 768px) {
-      .info-card {
-        bottom: 0;
-        top: auto;
+      .sidebar {
+        width: 95%;
         left: 50%;
         transform: translateX(-50%);
-        width: 95%;
-        height: auto;
-        max-height: 55%;
+        top: auto;
+        bottom: 0;
         border-radius: 20px 20px 0 0;
+        height: 45%;
+        box-shadow: 0 -4px 15px rgba(0,0,0,0.15);
       }
-
-      .bus-title { font-size: 18px; }
-      .bus-details { font-size: 14px; }
-      .stop-item { font-size: 13px; }
     }
   </style>
 </head>
@@ -251,12 +273,12 @@
 <body>
   <div id="map"></div>
 
-  <div class="info-card">
+  <div class="sidebar">
     <h2>🚌 Active Buses</h2>
     <div id="busList"></div>
   </div>
 
-  <!-- ✅ Google Maps Loader -->
+  <!-- ✅ Google Maps Script -->
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxLu0osGhSyZCJt5TGO-gSPuGydL_u7XE&callback=initMap"
     async defer></script>
