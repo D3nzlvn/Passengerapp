@@ -120,7 +120,7 @@ document.addEventListener("DOMContentLoaded",()=>{
       const allStops=Object.values(routeStops).flat();
       const currentStop=allStops.find(s=>s.name===selectedStopName);
 
-      // ONLY redraw route lines, no ETA call
+      // redraw route lines, no ETA call
       let driverIndex=0;
       const drivers=snapshotCache.val();
       for(const [driverId,data] of Object.entries(drivers)){
@@ -130,6 +130,8 @@ document.addEventListener("DOMContentLoaded",()=>{
         driverIndex++;
         drawRoute(driverId,{lat:latest.latitude,lng:latest.longitude},currentStop,colorObj.code);
       }
+      // redraw sidebar highlights
+      updateMap(snapshotCache);
     }
   });
 });
@@ -147,13 +149,12 @@ let lastUpdateTime=0;
 
 onValue(driversRef,(snapshot)=>{
   const now=Date.now();
-  if(now-lastUpdateTime<20000) return; // 20s interval
+  if(now-lastUpdateTime<20000) return; // update every 20s
   lastUpdateTime=now;
   snapshotCache=snapshot;
   if(mapReady) updateMap(snapshot);
 });
 
-// Only update route if bus moves >50m
 function shouldUpdateRoute(driverId,newPos){
   const marker=busMarkers[driverId];
   if(!marker.prevPos){ marker.prevPos=newPos; return true; }
